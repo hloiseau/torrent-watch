@@ -1,0 +1,25 @@
+# Target configuration: deploy only AFTER the image is published and PUBLIC on GHCR.
+# This file does not assert that ghcr.io/hloiseau/torrent-watch:0.1.0 exists yet.
+# Replace 192.168.1.10 with your NAS LAN IP and 8080 with the qBittorrent WebUI port.
+services:
+  torrent-watch:
+    image: ghcr.io/hloiseau/torrent-watch:0.1.0
+    pull_policy: always
+    restart: unless-stopped
+    init: true
+    environment:
+      PUBLIC_ORIGIN: https://suivi.hugoloiseau.fr
+      VIEWER_USERNAME: ami
+      VIEWER_PASSWORD: CHANGE_ME_WITH_A_UNIQUE_RANDOM_PASSWORD
+      QBIT_URL: http://192.168.1.10:8080
+      QBIT_USERNAME: admin
+      QBIT_PASSWORD: CHANGE_ME_QBIT_PASSWORD
+      # Exact category allowlist. Omit to show all torrents.
+      # QBIT_CATEGORIES: '["radarr","sonarr"]'
+    ports:
+      - "192.168.1.10:5080:5080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 256m

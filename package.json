@@ -1,0 +1,16 @@
+{
+  "name": "torrent-watch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A small, read-only qBittorrent dashboard for friends",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs",
+    "test:browser": "node test/browser.mjs"
+  },
+  "license": "Apache-2.0"
+}

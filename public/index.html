@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101719"><title>Torrent Watch · Suivi des téléchargements</title>
+  <link rel="icon" href="data:,"><link rel="stylesheet" href="/style.css"><script defer src="/app.js"></script>
+</head>
+<body>
+  <main>
+    <header><a class="brand" href="/" aria-label="Torrent Watch, accueil"><span class="brand-icon" aria-hidden="true">↓</span><span>torrent<span class="brand-light">watch</span><small>LES COULISSES DE LA BIBLIOTHÈQUE</small></span></a><span class="readonly">LECTURE SEULE</span></header>
+    <section id="login-panel" class="login-panel" hidden>
+      <div class="eyebrow">BIENVENUE DANS LES COULISSES</div><h1>Ça arrive<br>dans la bibliothèque.</h1>
+      <p class="intro">Un œil sur les téléchargements du serveur,<br>jusqu’au dernier mégaoctet.</p>
+      <form id="login-form"><h2>Accéder au suivi</h2><label for="username">Identifiant</label><input id="username" autocomplete="username" value="ami" required maxlength="200"><label for="password">Mot de passe</label><input id="password" type="password" autocomplete="current-password" required maxlength="1024"><p id="login-error" class="error" role="alert"></p><button id="login-button" class="primary" type="submit">Ouvrir le tableau de bord <span aria-hidden="true">↗</span></button></form>
+    </section>
+    <section id="dashboard" hidden>
+      <div class="heading"><div><div class="eyebrow">ACTIVITÉ DU SERVEUR</div><h1>En route vers Plex.</h1><p class="intro">Progression, vitesse et disponibilité. Tout simplement.</p></div><button id="logout" class="text-button">Déconnexion ↗</button></div>
+      <div class="summary" aria-label="Résumé des torrents autorisés"><div><span>En téléchargement</span><strong id="metric-active">—</strong><small>transferts actifs</small></div><div><span>Réception</span><strong id="metric-down">—</strong><small>débit des torrents affichés</small></div><div><span>Envoi</span><strong id="metric-up">—</strong><small>partagé avec les autres</small></div><div><span>Terminés</span><strong id="metric-done">—</strong><small>téléchargement à 100 %</small></div></div>
+      <div class="toolbar"><div class="filters" role="group" aria-label="Filtrer les torrents"><button data-filter="pending" class="selected" aria-pressed="true">En cours <span id="pending-count">0</span></button><button data-filter="all" aria-pressed="false">Tout</button><button data-filter="done" aria-pressed="false">Terminés</button></div><label class="search-label"><span class="sr-only">Rechercher un téléchargement</span><input id="search" type="search" placeholder="Rechercher un titre…" maxlength="500"></label></div>
+      <div class="status-line"><span id="connection" role="status">Connexion au serveur…</span><button id="refresh" class="text-button">↻ Actualiser</button></div>
+      <div id="error-banner" class="error-banner" role="alert" hidden></div>
+      <div class="table-wrap"><table><thead><tr><th scope="col">TITRE / PROGRESSION</th><th scope="col">DÉBIT ↓ / ↑</th><th scope="col">SEEDS <span title="Connectés / connus dans l’essaim">ⓘ</span></th><th scope="col">PEERS <span title="Connectés / connus dans l’essaim">ⓘ</span></th><th scope="col">TEMPS RESTANT</th></tr></thead><tbody id="torrent-list"></tbody></table><div id="empty" class="empty" hidden><span aria-hidden="true">✓</span><h2>Rien en attente.</h2><p>Les nouveaux téléchargements apparaîtront ici.</p></div></div>
+      <div class="footnote"><span>Seeds / peers : connectés / connus. « — » = information indisponible.</span><span>Un fichier terminé peut encore être en cours d’importation dans Plex.</span></div>
+    </section>
+    <p id="loading" class="loading" role="status">Ouverture du suivi…</p>
+    <footer><span>torrentwatch <span class="footer-dot">/</span> Un peu de patience, beaucoup de données.</span><span>Suivi uniquement · actualisation toutes les 5 s</span></footer>
+  </main>
+</body>
+</html>

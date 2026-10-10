@@ -1,0 +1,24 @@
+# Build the local image first (README), then use Apps > Install via YAML.
+# Replace the example LAN IP and credentials. No external image has been published.
+services:
+  torrent-watch:
+    image: torrent-watch:0.1.0
+    pull_policy: never
+    restart: unless-stopped
+    init: true
+    environment:
+      PUBLIC_ORIGIN: https://suivi.hugoloiseau.fr
+      VIEWER_USERNAME: ami
+      VIEWER_PASSWORD: CHANGE_ME_WITH_A_UNIQUE_RANDOM_PASSWORD
+      QBIT_URL: http://192.168.1.10:8080
+      QBIT_USERNAME: admin
+      QBIT_PASSWORD: CHANGE_ME_QBIT_PASSWORD
+      # Uncomment to only share these categories; names must match exactly.
+      # QBIT_CATEGORIES: '["radarr","sonarr"]'
+    ports:
+      - "192.168.1.10:5080:5080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 256m

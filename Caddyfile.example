@@ -1,0 +1,5 @@
+# Example only: replace NAS address and choose your actual hostname.
+# Preserve the other sites in your existing Caddy configuration.
+suivi.hugoloiseau.fr {
+    reverse_proxy 192.168.1.10:5080
+}

@@ -1,0 +1,17 @@
+services:
+  torrent-watch:
+    build: .
+    image: torrent-watch:0.1.0
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    ports:
+      # Loopback default: for a reverse proxy on the host.
+      # If Caddy is in a separate container, use the NAS LAN IP here,
+      # or a shared Docker network. See README.
+      - "${BIND_IP:-127.0.0.1}:5080:5080"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 100
+    mem_limit: 256m

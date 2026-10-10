@@ -14,8 +14,8 @@ const server = createApp(config, { getSnapshot: async () => {
     sample('Big Buck Bunny (2008) · 2160p',.726,'downloading',{downloadSpeed:12582912,uploadSpeed:849346,eta:186,seedsConnected:14,peersConnected:5}),
     sample('Sintel (2010) · BluRay 1080p',.413,'downloading',{downloadSpeed:6501171,uploadSpeed:125829,eta:860,seedsConnected:8,seedsTotal:23,peersConnected:3}),
     sample('Tears of Steel (2012) · 1080p',.128,'stalledDL',{seedsConnected:0,seedsTotal:2,peersTotal:0}),
-    sample('Ubuntu Desktop · image ISO',0,'queuedDL',{category:'linux',seedsTotal:null,peersTotal:null}),
-    sample('Cosmos Laundromat · 1080p',1,'uploading',{uploadSpeed:524288,seedsConnected:0,peersConnected:9}),
+    sample('Ubuntu Desktop · image ISO',0,'queuedDL',{category:'linux',seedsConnected:null,peersConnected:null,seedsTotal:null,peersTotal:null}),
+    sample('Cosmos Laundromat · 1080p',1,'uploading',{uploadSpeed:1048576,seedsConnected:0,peersConnected:9}),
     sample('<img src=x onerror="window.INJECTED=true">',1,'stalledUP')
   ]};
 } }, {
@@ -41,9 +41,46 @@ try {
  await page.getByText('Finish Plex login').click();
  await page.locator('#torrent-list tr').first().waitFor();
  assert.equal(await page.locator('#torrent-list tr').count(),4);
+ const titles = () => page.locator('#torrent-list .torrent-name').allTextContents();
+ await page.locator('[data-sort="name"]').focus();
+ await page.keyboard.press('Enter');
+ assert.match((await titles())[0], /^Big Buck/);
+ assert.equal(await page.locator('th').first().getAttribute('aria-sort'), 'ascending');
+ await page.locator('[data-sort="name"]').click();
+ assert.match((await titles())[0], /^Ubuntu/);
+ assert.equal(await page.locator('th').first().getAttribute('aria-sort'), 'descending');
+ await page.locator('[data-sort="progress"]').click();
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('[data-sort="progress"]').click();
+ assert.match((await titles())[0], /^Ubuntu/);
+ await page.locator('[data-sort="downloadSpeed"]').click();
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('[data-sort="downloadSpeed"]').click();
+ assert.match((await titles())[0], /^Tears/);
+ await page.locator('[data-sort="seedsConnected"]').click();
+ assert.match((await titles())[0], /^Big Buck/, '14 seeds sort before 8 numerically');
+ assert.match((await titles()).at(-1), /^Ubuntu/, 'unknown seeds stay last descending');
+ await page.locator('[data-sort="seedsConnected"]').click();
+ assert.match((await titles())[0], /^Tears/);
+ assert.match((await titles()).at(-1), /^Ubuntu/, 'unknown seeds stay last ascending');
+ await page.locator('[data-sort="eta"]').click();
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('[data-sort="eta"]').click();
+ assert.match((await titles())[0], /^Sintel/);
+ assert.match((await titles()).at(-1), /^Ubuntu/, 'unknown ETA stays last');
+ await page.locator('[data-sort="downloadSpeed"]').click();
  await page.screenshot({path:new URL('../test-results/desktop.png', import.meta.url).pathname,fullPage:true});
  await page.locator('[data-filter="all"]').click();
  assert.equal(await page.locator('#torrent-list tr').count(),6);
+ await page.locator('[data-sort="uploadSpeed"]').click();
+ assert.match((await titles())[0], /^Cosmos/, 'seeding torrents can sort first by upload speed');
+ await page.locator('[data-sort="uploadSpeed"]').click();
+ assert.equal((await titles())[0], '<img src=x onerror="window.INJECTED=true">');
+ await page.locator('[data-sort="peersConnected"]').click();
+ assert.match((await titles())[0], /^Cosmos/);
+ await page.locator('#refresh').click();
+ await page.waitForFunction(() => !document.getElementById('refresh').disabled);
+ assert.match((await titles())[0], /^Cosmos/, 'refresh keeps the selected sort');
  assert.equal(await page.locator('#torrent-list img').count(),0);
  assert.equal(await page.evaluate(()=>window.INJECTED),undefined);
  await page.locator('#search').fill('sintel');
@@ -53,6 +90,17 @@ try {
  await page.locator('#search').fill('');
  await page.locator('[data-filter="pending"]').click();
  await page.setViewportSize({width:390,height:844});
+ await page.locator('#sort-field').selectOption('name');
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('#sort-direction').click();
+ assert.match((await titles())[0], /^Ubuntu/);
+ await page.locator('#search').fill('sintel');
+ assert.equal(await page.locator('#torrent-list tr').count(),1);
+ await page.locator('#search').fill('');
+ assert.match((await titles())[0], /^Ubuntu/, 'search retains sort');
+ await page.locator('[data-filter="all"]').click();
+ assert.match((await titles())[0], /^Ubuntu/, 'filter change retains sort');
+ await page.locator('[data-filter="pending"]').click();
  await page.screenshot({path:new URL('../test-results/mobile.png', import.meta.url).pathname,fullPage:true});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'mobile should not overflow');
  fail=true; await page.locator('#refresh').click();
@@ -63,5 +111,5 @@ try {
  await page.locator('#login-panel').waitFor({state:'visible'});
  assert.equal(await page.locator('#torrent-list tr').count(),0);
  assert.deepEqual(errors,[]);
- console.log('Browser checks passed: login, 1440px desktop, 390px mobile, filters, search, empty state, XSS text escaping, offline data freshness, logout.');
+ console.log('Browser checks passed: login, 1440px desktop, 390px mobile, column sorting both directions, numeric/null sorting, mobile sorting, sort retained across refresh/filter/search, filters, search, empty state, XSS text escaping, offline data freshness, logout.');
 } finally { await browser?.close(); await new Promise(r=>{server.close(r);server.closeAllConnections()}); }

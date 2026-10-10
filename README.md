@@ -2,13 +2,15 @@
 
 Un tableau de bord en lecture seule pour suivre qBittorrent sans exposer sa WebUI. Interface française, adaptée au téléphone : progression, débits, seeds, peers, état et temps restant.
 
-**Version 0.2.1 : compatibilité qBittorrent 5.2 et connexion avec Plex.** Seuls les comptes ayant accès au serveur Plex configuré peuvent consulter les téléchargements. Le compte de consultation partagé de la version 0.1.0 est supprimé.
+**Version 0.2.2 : compatibilité qBittorrent 5.2 et connexion avec Plex.** Seuls les comptes ayant accès au serveur Plex configuré peuvent consulter les téléchargements. Le compte de consultation partagé de la version 0.1.0 est supprimé.
 
-La version 0.2.1 accepte les réponses de connexion HTTP 204 et les cookies `QBT_SID_<port>` de qBittorrent 5.2, tout en conservant la compatibilité avec `200 Ok.` et `SID`. Pour mettre à jour depuis 0.2.0, changer uniquement le tag de l’image puis redéployer.
+La version 0.2.2 ajoute le tri en cliquant sur les en-têtes : titre, progression, débit descendant ou montant, seeds connectés, peers connectés et temps restant. Cliquer à nouveau inverse le sens ; la flèche indique le tri actif. Sur téléphone, utiliser le sélecteur « Trier par ». Le choix reste actif pendant les rafraîchissements, les recherches et les changements de filtre. Les valeurs inconnues restent à la fin ; les torrents terminés ont un temps restant de zéro.
+
+Pour mettre à jour depuis 0.2.0 ou 0.2.1, changer uniquement le tag de l’image puis redéployer. La compatibilité qBittorrent 5.2 (`204` et `QBT_SID_<port>`) et versions précédentes (`200 Ok.` et `SID`) est conservée.
 
 ## Installation sur TrueNAS SCALE 25.10
 
-Image : `ghcr.io/hloiseau/torrent-watch:0.2.1` (Linux amd64). Le workflow publie cette version et `latest` après réussite des tests serveur et navigateur.
+Image : `ghcr.io/hloiseau/torrent-watch:0.2.2` (Linux amd64). Le workflow publie cette version et `latest` après réussite des tests serveur et navigateur.
 
 1. Récupérer le `machineIdentifier` de ton serveur Plex depuis le réseau local :
 
@@ -48,7 +50,7 @@ Si Caddy et Torrent Watch partagent un réseau Docker, il est possible de suppri
 
 ### Mise à jour depuis 0.1.0
 
-Dans la configuration de l’app, remplacer l’image par `ghcr.io/hloiseau/torrent-watch:0.2.1`, supprimer `VIEWER_USERNAME` et `VIEWER_PASSWORD`, ajouter `PLEX_SERVER_ID`, puis redéployer. Les autres réglages restent identiques. Les anciennes sessions sont invalidées au redémarrage ; le mot de passe partagé ne permet plus de se connecter.
+Dans la configuration de l’app, remplacer l’image par `ghcr.io/hloiseau/torrent-watch:0.2.2`, supprimer `VIEWER_USERNAME` et `VIEWER_PASSWORD`, ajouter `PLEX_SERVER_ID`, puis redéployer. Les autres réglages restent identiques. Les anciennes sessions sont invalidées au redémarrage ; le mot de passe partagé ne permet plus de se connecter.
 
 ## Qui peut consulter le suivi ?
 
@@ -132,14 +134,14 @@ Avant de partager : vérifier un compte autorisé, un compte sans accès au serv
 Pour construire sur le NAS, depuis un dataset contenant les sources :
 
 ```bash
-sudo docker build -t torrent-watch:0.2.1 .
+sudo docker build -t torrent-watch:0.2.2 .
 ```
 
 Utiliser alors [`truenas.yaml`](truenas.yaml), avec `pull_policy: never`. Cette variante attend l’image locale. Ne pas installer Node/npm sur TrueNAS.
 
 Pour Docker Compose hors interface TrueNAS : adapter `.env.example`, le copier en `.env`, puis `docker compose up -d --build`. Le port est lié à `127.0.0.1` par défaut ; adapter `BIND_IP` si Caddy est dans un autre conteneur. Ne pas faire gérer la même instance par Compose et l’app TrueNAS simultanément.
 
-Le workflow [Publish image](https://github.com/hloiseau/torrent-watch/actions/workflows/publish.yml) teste, construit et publie les tags `0.2.1`, `latest` et `sha-<commit>` sur chaque push de `main`. Le package GHCR est public. Le tag `0.1.0` conserve l’ancienne version à mot de passe partagé.
+Le workflow [Publish image](https://github.com/hloiseau/torrent-watch/actions/workflows/publish.yml) teste, construit et publie les tags `0.2.2`, `latest` et `sha-<commit>` sur chaque push de `main`. Le package GHCR est public. Le tag `0.1.0` conserve l’ancienne version à mot de passe partagé.
 
 Référence [interface Apps TrueNAS 25.10](https://www.truenas.com/docs/scale/25.10/scaleuireference/apps/).
 

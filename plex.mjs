@@ -9,7 +9,7 @@ export function createPlexClient(config, fetcher = fetch) {
     const response = await fetcher(`https://plex.tv/api/v2/${path}`, {
       method, redirect: 'error', signal: AbortSignal.timeout(8000),
       headers: { Accept: 'application/json', 'X-Plex-Product': 'Torrent Watch',
-        'X-Plex-Version': '0.2.1', 'X-Plex-Client-Identifier': clientId,
+        'X-Plex-Version': '0.2.2', 'X-Plex-Client-Identifier': clientId,
         ...(token ? { 'X-Plex-Token': token } : {}) },
     });
     if (!response.ok) {

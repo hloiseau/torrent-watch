@@ -1,6 +1,43 @@
 const $ = id => document.getElementById(id);
 let torrents = [];
 let filter = 'pending';
+let sortKey = 'downloadSpeed';
+let sortDirection = 'desc';
+const sortLabels = { name: 'Titre', progress: 'Progression', downloadSpeed: 'Débit descendant', uploadSpeed: 'Débit montant', seedsConnected: 'Seeds connectés', peersConnected: 'Peers connectés', eta: 'Temps restant' };
+const defaultDirection = key => ['name', 'eta'].includes(key) ? 'asc' : 'desc';
+function sortValue(torrent) {
+  if (sortKey === 'eta') return torrent.progress >= 1 ? 0 : torrent.eta > 0 ? torrent.eta : null;
+  return torrent[sortKey];
+}
+function compareTorrents(a, b) {
+  const left = sortValue(a), right = sortValue(b);
+  // Unknown counts and ETAs always stay last, in either direction.
+  if (left == null && right != null) return 1;
+  if (right == null && left != null) return -1;
+  const order = left == null ? 0 : sortKey === 'name'
+    ? left.localeCompare(right, 'fr', { numeric: true, sensitivity: 'base' }) : left - right;
+  return order * (sortDirection === 'asc' ? 1 : -1) || a.name.localeCompare(b.name, 'fr', { numeric: true });
+}
+function updateSortControls() {
+  document.querySelectorAll('th[aria-sort]').forEach(th => th.setAttribute('aria-sort', 'none'));
+  document.querySelectorAll('[data-sort]').forEach(button => {
+    const active = button.dataset.sort === sortKey;
+    button.classList.toggle('sort-active', active);
+    button.querySelector('.sort-arrow').textContent = active ? (sortDirection === 'asc' ? '↑' : '↓') : '↕';
+    const next = active ? (sortDirection === 'asc' ? 'desc' : 'asc') : defaultDirection(button.dataset.sort);
+    button.setAttribute('aria-label', `Trier par ${sortLabels[button.dataset.sort].toLocaleLowerCase('fr')}, ordre ${next === 'asc' ? 'croissant' : 'décroissant'}`);
+    if (active) button.closest('th').setAttribute('aria-sort', sortDirection === 'asc' ? 'ascending' : 'descending');
+  });
+  $('sort-field').value = sortKey;
+  $('sort-direction').textContent = sortDirection === 'asc' ? '↑ Croissant' : '↓ Décroissant';
+  $('sort-direction').setAttribute('aria-label', `Passer au tri ${sortDirection === 'asc' ? 'décroissant' : 'croissant'}`);
+}
+function selectSort(key) {
+  if (key === sortKey) sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+  else { sortKey = key; sortDirection = defaultDirection(key); }
+  updateSortControls();
+  render();
+}
 let authenticated = false;
 let updating = false;
 let generation = 0;
@@ -69,7 +106,7 @@ function render() {
   $('pending-count').textContent = pending.length;
   const search = $('search').value.toLocaleLowerCase('fr');
   const visible = torrents.filter(t => (filter === 'all' || (filter === 'pending' ? t.progress < 1 : t.progress >= 1)) && t.name.toLocaleLowerCase('fr').includes(search))
-    .sort((a, b) => Number(b.downloadSpeed > 0) - Number(a.downloadSpeed > 0) || b.downloadSpeed - a.downloadSpeed || a.name.localeCompare(b.name, 'fr'));
+    .sort(compareTorrents);
   const rows = document.createDocumentFragment();
   for (const t of visible) {
     const row = element('tr');
@@ -145,6 +182,10 @@ document.querySelectorAll('[data-filter]').forEach(button => button.addEventList
   document.querySelectorAll('[data-filter]').forEach(b => { b.classList.toggle('selected', b === button); b.setAttribute('aria-pressed', String(b === button)); });
   render();
 }));
+document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => selectSort(button.dataset.sort)));
+$('sort-field').addEventListener('change', event => selectSort(event.target.value));
+$('sort-direction').addEventListener('click', () => selectSort(sortKey));
+updateSortControls();
 $('search').addEventListener('input', render);
 $('refresh').addEventListener('click', refresh);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });

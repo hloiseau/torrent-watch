@@ -1,6 +1,6 @@
 {
   "name": "torrent-watch",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "description": "A small, read-only qBittorrent dashboard for friends",

@@ -2,7 +2,7 @@
 # Replace the example LAN IP and credentials.
 services:
   torrent-watch:
-    image: torrent-watch:0.2.3
+    image: torrent-watch:0.2.4
     pull_policy: never
     restart: unless-stopped
     init: true

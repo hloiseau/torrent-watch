@@ -6,16 +6,16 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 mkdirSync(new URL('../test-results/', import.meta.url), { recursive: true });
 const config = loadConfig({ PLEX_SERVER_ID: 'test-server-id', QBIT_URL: 'http://localhost:8080', QBIT_USERNAME: 'test', QBIT_PASSWORD: 'test', PUBLIC_ORIGIN: 'http://localhost:5080', COOKIE_SECURE: 'false' });
-const sample = (name, progress, state, extra = {}) => ({name,progress,state,category:'films',size:8589934592,downloaded:Math.round(8589934592*progress),downloadSpeed:0,uploadSpeed:0,eta:null,seedsConnected:0,seedsTotal:42,peersConnected:0,peersTotal:17,ratio:0,...extra});
+const sample = (name, progress, state, extra = {}) => ({name,progress,state,category:'films',size:8589934592,downloaded:Math.round(8589934592*progress),downloadSpeed:0,uploadSpeed:0,eta:null,seedsConnected:0,seedsTotal:42,peersConnected:0,peersTotal:17,ratio:0,uploaded:0,...extra});
 let fail = false;
 const server = createApp(config, { getSnapshot: async () => {
   if (fail) throw new Error('offline');
   return {updatedAt:new Date().toISOString(),torrents:[
-    sample('Big Buck Bunny (2008) · 2160p',.726,'downloading',{downloadSpeed:12582912,uploadSpeed:849346,eta:186,seedsConnected:14,peersConnected:5}),
-    sample('Sintel (2010) · BluRay 1080p',.413,'downloading',{downloadSpeed:6501171,uploadSpeed:125829,eta:860,seedsConnected:8,seedsTotal:23,peersConnected:3}),
+    sample('Big Buck Bunny (2008) · 2160p',.726,'downloading',{ratio:0.5,uploaded:1073741824,downloadSpeed:12582912,uploadSpeed:849346,eta:186,seedsConnected:14,peersConnected:5}),
+    sample('Sintel (2010) · BluRay 1080p',.413,'downloading',{ratio:10,uploaded:524288000,size:2147483648,downloadSpeed:6501171,uploadSpeed:125829,eta:860,seedsConnected:8,seedsTotal:23,peersConnected:3}),
     sample('Tears of Steel (2012) · 1080p',.128,'stalledDL',{seedsConnected:0,seedsTotal:2,peersTotal:0}),
-    sample('Ubuntu Desktop · image ISO',0,'queuedDL',{category:'linux',seedsConnected:null,peersConnected:null,seedsTotal:null,peersTotal:null}),
-    sample('Cosmos Laundromat · 1080p',1,'uploading',{uploadSpeed:1048576,seedsConnected:0,peersConnected:9}),
+    sample('Ubuntu Desktop · image ISO',0,'queuedDL',{size:1073741824,category:'linux',seedsConnected:null,peersConnected:null,seedsTotal:null,peersTotal:null}),
+    sample('Cosmos Laundromat · 1080p',1,'uploading',{ratio:2,uploaded:12884901888,uploadSpeed:1048576,seedsConnected:0,peersConnected:9}),
     sample('<img src=x onerror="window.INJECTED=true">',1,'stalledUP')
   ]};
 } }, {
@@ -41,9 +41,9 @@ try {
  await page.getByText('Finish Plex login').click();
  await page.locator('#torrent-list tr').first().waitFor();
  assert.equal(await page.locator('#torrent-list tr').count(),4);
- assert.equal(await page.locator('thead th').count(),6);
+ assert.equal(await page.locator('thead th').count(),12);
  assert.equal(await page.locator('th.speed-heading').count(),2);
- assert.equal(await page.locator('#torrent-list tr').first().locator('td').count(),6);
+ assert.equal(await page.locator('#torrent-list tr').first().locator('td').count(),12);
  assert.match(await page.locator('.download-speed-cell').first().textContent(), /12 Mio\/s/);
  assert.match(await page.locator('.upload-speed-cell').first().textContent(), /829/);
  const titles = () => page.locator('#torrent-list .torrent-name').allTextContents();
@@ -74,9 +74,46 @@ try {
  assert.match((await titles())[0], /^Sintel/);
  assert.match((await titles()).at(-1), /^Ubuntu/, 'unknown ETA stays last');
  await page.locator('[data-sort="downloadSpeed"]').click();
+ await page.locator('[data-sort="state"]').click();
+ assert.match((await titles())[0], /^Tears/, 'state sorts on the displayed French label');
+ await page.locator('[data-sort="category"]').click();
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('[data-sort="category"]').click();
+ assert.match((await titles())[0], /^Ubuntu/);
+ await page.locator('[data-sort="size"]').click();
+ assert.match((await titles())[0], /^Big Buck/);
+ await page.locator('[data-sort="size"]').click();
+ assert.match((await titles())[0], /^Ubuntu/);
+ assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'wide table scrolls within its container');
+ await page.setViewportSize({width:1920,height:1080});
+ await page.locator('[data-sort="downloadSpeed"]').click();
+ await page.locator('.table-wrap').evaluate(el => { el.scrollLeft = 0; });
  await page.screenshot({path:new URL('../test-results/desktop.png', import.meta.url).pathname,fullPage:true});
  await page.locator('[data-filter="all"]').click();
  assert.equal(await page.locator('#torrent-list tr').count(),6);
+ await page.locator('[data-sort="ratio"]').click();
+ assert.match((await titles())[0], /^Sintel/, 'ratio uses numeric order: 10 before 2');
+ assert.equal(await page.locator('#torrent-list tr').first().locator('[data-column="ratio"]').textContent(), '10');
+ await page.locator('[data-sort="ratio"]').click();
+ assert.equal((await titles())[0], '<img src=x onerror="window.INJECTED=true">');
+ await page.locator('[data-sort="uploaded"]').click();
+ assert.match((await titles())[0], /^Cosmos/);
+ assert.equal(await page.locator('#torrent-list tr').first().locator('[data-column="uploaded"]').textContent(), '12 Gio');
+ await page.locator('[data-sort="uploaded"]').click();
+ assert.equal((await titles())[0], '<img src=x onerror="window.INJECTED=true">');
+ await page.locator('[data-sort="ratio"]').click();
+ await page.locator('#column-picker summary').click();
+ await page.locator('[data-column-toggle="ratio"]').uncheck();
+ assert.equal(await page.locator('th[data-column="ratio"]').isVisible(), false);
+ assert.equal(await page.locator('th[data-column="name"]').getAttribute('aria-sort'), 'ascending', 'hiding active column resets sort');
+ await page.reload();
+ await page.locator('#torrent-list tr').first().waitFor();
+ assert.equal(await page.locator('th[data-column="ratio"]').isVisible(), false, 'column preference survives reload');
+ await page.locator('#column-picker summary').click();
+ await page.locator('[data-column-toggle="ratio"]').check();
+ await page.locator('#column-picker summary').click();
+ assert.equal(await page.locator('th[data-column="ratio"]').isVisible(), true);
+ await page.locator('[data-filter="all"]').click();
  await page.locator('[data-sort="uploadSpeed"]').click();
  assert.match((await titles())[0], /^Cosmos/, 'seeding torrents can sort first by upload speed');
  assert.equal(await page.locator('th.speed-heading').nth(0).getAttribute('aria-sort'), 'none');
@@ -101,6 +138,13 @@ try {
  assert.equal(await page.locator('#sort-field option[value="uploadSpeed"]').textContent(), 'Vitesse d’upload');
  assert.equal(await page.locator('.download-speed-cell').first().getAttribute('data-label'), 'Vitesse de téléchargement');
  assert.equal(await page.locator('.upload-speed-cell').first().getAttribute('data-label'), 'Vitesse d’upload');
+ await page.locator('#sort-field').selectOption('ratio');
+ assert.match((await titles())[0], /^Sintel/);
+ await page.locator('#column-picker summary').click();
+ await page.locator('[data-column-toggle="uploaded"]').uncheck();
+ assert.equal(await page.locator('#torrent-list [data-column="uploaded"]').first().isVisible(), false);
+ await page.locator('[data-column-toggle="uploaded"]').check();
+ await page.locator('#column-picker summary').click();
  await page.locator('#sort-field').selectOption('name');
  assert.match((await titles())[0], /^Big Buck/);
  await page.locator('#sort-direction').click();
@@ -122,5 +166,5 @@ try {
  await page.locator('#login-panel').waitFor({state:'visible'});
  assert.equal(await page.locator('#torrent-list tr').count(),0);
  assert.deepEqual(errors,[]);
- console.log('Browser checks passed: login, 1440px desktop, 390px mobile, column sorting both directions, numeric/null sorting, mobile sorting, sort retained across refresh/filter/search, filters, search, empty state, XSS text escaping, offline data freshness, logout.');
+ console.log('Browser checks passed: login, 1440px desktop, 390px mobile, 12 columns, ratio/size/uploaded/state/category sorting, persistent column visibility, column sorting both directions, numeric/null sorting, mobile sorting, sort retained across refresh/filter/search, filters, search, empty state, XSS text escaping, offline data freshness, logout.');
 } finally { await browser?.close(); await new Promise(r=>{server.close(r);server.closeAllConnections()}); }

@@ -21,7 +21,21 @@ Le navigateur contacte Torrent Watch. Le serveur Torrent Watch contacte l’API 
 
 L’interface publique expose uniquement sa page de connexion ; les données nécessitent une session. Aucun CDN, police distante, analytics ou ressource externe.
 
-## Installation TrueNAS SCALE 25.10
+## Installation TrueNAS SCALE 25.10 — image GHCR (recommandé)
+
+Image publiée : **`ghcr.io/hloiseau/torrent-watch:0.1.0`** (Linux amd64). Le téléchargement sans identifiants GHCR a été vérifié. Pas de construction locale nécessaire.
+
+1. Dans **Apps → Discover Apps → menu ⋮ → Install via YAML**, coller [`truenas-ghcr.yaml`](truenas-ghcr.yaml).
+2. Remplacer l’IP LAN du NAS, le port et les identifiants de la WebUI qBittorrent, puis choisir un mot de passe de consultation unique d’au moins 16 caractères.
+3. Adapter `PUBLIC_ORIGIN` au domaine HTTPS utilisé dans Caddy ; ajouter le bloc de [`Caddyfile.example`](Caddyfile.example).
+4. Optionnel : configurer `QBIT_CATEGORIES` avec la liste exacte des catégories à partager.
+5. Accéder à l’adresse HTTPS et se connecter avec le compte de consultation. Aucun volume de médias ni accès Docker n’est nécessaire.
+
+Ne pas rediriger le port 5080 ou la WebUI qBittorrent sur la box : seul Caddy reçoit le trafic Internet. Les identifiants de qBittorrent restent côté serveur. Pour des mots de passe contenant `$`, écrire `$$` dans le YAML Compose.
+
+**Validation du 10 octobre 2026 :** 10 tests serveur, parcours navigateur à 1440 px et 390 px, construction Docker et publication GHCR réussis dans [GitHub Actions](https://github.com/hloiseau/torrent-watch/actions/runs/38082394347). La connexion au véritable qBittorrent reste à vérifier lors de l’installation.
+
+## Variante : construire l’image localement sur TrueNAS
 
 ### 1. Construire l’image locale
 
@@ -137,7 +151,7 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-Le script utilise uniquement des données fictives et un serveur local éphémère. Il vérifie la connexion, les filtres, la recherche, l’échappement des titres, la panne amont, la déconnexion et l’absence de débordement horizontal à 390 px. Il produit des captures ordinateur/mobile dans `test-results/`. Ce test est fourni mais n’a pas pu être exécuté jusqu’au bout dans l’environnement de création : Chromium absent et téléchargement du navigateur en échec. Les 10 tests serveur ont été exécutés et passent.
+Le script utilise uniquement des données fictives et un serveur local éphémère. Il vérifie la connexion, les filtres, la recherche, l’échappement des titres, la panne amont, la déconnexion et l’absence de débordement horizontal à 390 px. Il produit des captures ordinateur/mobile dans `test-results/`. Les tests navigateur et les 10 tests serveur ont été exécutés avec succès dans GitHub Actions. Les captures ordinateur et mobile ont également été inspectées.
 
 ## Limites assumées de cette première version
 
@@ -149,12 +163,12 @@ Le script utilise uniquement des données fictives et un serveur local éphémè
 - Seeds/peers = nombre connecté / nombre connu dans l’essaim, pas promesse de sources joignables. `—` indique une donnée inconnue et le temps restant peut être indisponible. Aucun affichage d’IP ou de détail individuel des peers.
 - Le téléchargement à 100 % ne garantit pas l’importation par Sonarr/Radarr ni l’indexation dans Plex.
 - Pas d’historique persistant, de notifications, ni de contrôle du client. Liste limitée à 20 000 torrents / 8 Mio de réponse upstream pour borner l’usage mémoire.
-- Le Dockerfile et le YAML sont fournis ; la construction Docker et la connexion au NAS doivent encore être vérifiées sur ton installation.
+- La construction Docker et le téléchargement anonyme de l’image ont été validés. Le déploiement sur le NAS et la connexion à son qBittorrent restent à vérifier sur ton installation.
 
 ## Publication GitHub / GHCR
 
 Le projet est indépendant de LibraryDownloadarr et peut être poussé dans un nouveau dépôt public `hloiseau/torrent-watch`. Le workflow `Publish image` se déclenche sur les pushes de `main` (ou manuellement). Il exécute les tests serveur et navigateur, construit l’image Docker, puis publie les tags `0.1.0`, `latest` et `sha-<commit>` sur `ghcr.io/<propriétaire>/<dépôt>` avec le `GITHUB_TOKEN` du workflow. La CI de pull request vérifie les tests serveur et la construction sans publier.
 
-La première publication d’un package GHCR peut être privée, même avec un dépôt public. Rendre le package public dans ses réglages avant de l’utiliser sans identifiants sur TrueNAS. Une fois le workflow réussi et la visibilité vérifiée, utiliser `truenas-ghcr.yaml`. Ce YAML cible `ghcr.io/hloiseau/torrent-watch:0.1.0` ; il ne garantit pas que l’image a déjà été publiée. L’ancienne variante `truenas.yaml` reste disponible pour une image construite localement.
+La première publication d’un package GHCR peut être privée, même avec un dépôt public. Rendre le package public dans ses réglages avant de l’utiliser sans identifiants sur TrueNAS. Une fois le workflow réussi et la visibilité vérifiée, utiliser `truenas-ghcr.yaml`. Ce YAML cible l’image publique `ghcr.io/hloiseau/torrent-watch:0.1.0`, dont le téléchargement anonyme a été vérifié le 10 octobre 2026. L’ancienne variante `truenas.yaml` reste disponible pour une image construite localement.
 
 Licence Apache 2.0 (voir [LICENSE](LICENSE)).

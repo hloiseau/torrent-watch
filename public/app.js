@@ -3,7 +3,7 @@ let torrents = [];
 let filter = 'pending';
 let sortKey = 'downloadSpeed';
 let sortDirection = 'desc';
-const sortLabels = { name: 'Titre', progress: 'Progression', downloadSpeed: 'Débit descendant', uploadSpeed: 'Débit montant', seedsConnected: 'Seeds connectés', peersConnected: 'Peers connectés', eta: 'Temps restant' };
+const sortLabels = { name: 'Titre', progress: 'Progression', downloadSpeed: 'Vitesse de téléchargement', uploadSpeed: 'Vitesse d’upload', seedsConnected: 'Seeds connectés', peersConnected: 'Peers connectés', eta: 'Temps restant' };
 const defaultDirection = key => ['name', 'eta'].includes(key) ? 'asc' : 'desc';
 function sortValue(torrent) {
   if (sortKey === 'eta') return torrent.progress >= 1 ? 0 : torrent.eta > 0 ? torrent.eta : null;
@@ -124,9 +124,13 @@ function render() {
     details.append(element('span', `state ${active} ${danger}`, states[t.state] || 'État inconnu'), element('span', '', `${bytes(t.downloaded)} / ${bytes(t.size)}`));
     if (t.category) details.append(element('span', 'category', t.category));
     title.append(top, progress, details);
-    const speed = element('td', 'speed-cell'); speed.dataset.label = 'Débit';
-    speed.append(element('strong', t.downloadSpeed ? 'mint' : '', `↓ ${bytes(t.downloadSpeed)}/s`), element('small', '', `↑ ${bytes(t.uploadSpeed)}/s`));
-    row.append(title, speed);
+    row.append(title);
+    for (const [key, className] of [['downloadSpeed', 'download-speed-cell'], ['uploadSpeed', 'upload-speed-cell']]) {
+      const cell = element('td', `speed-cell ${className}`);
+      cell.dataset.label = sortLabels[key];
+      cell.append(element('strong', t[key] > 0 ? 'mint' : '', `${bytes(t[key])}/s`));
+      row.append(cell);
+    }
     for (const [heading, connected, total] of [['Seeds', t.seedsConnected, t.seedsTotal], ['Peers', t.peersConnected, t.peersTotal]]) {
       const cell = element('td', 'count-cell'); cell.dataset.label = heading;
       cell.append(element('strong', '', connected === null ? '—' : fmt(connected, 0)), element('span', '', ` / ${total === null ? '—' : fmt(total, 0)}`));

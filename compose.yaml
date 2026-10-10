@@ -1,7 +1,7 @@
 services:
   torrent-watch:
     build: .
-    image: torrent-watch:0.2.2
+    image: torrent-watch:0.2.3
     restart: unless-stopped
     init: true
     env_file: .env

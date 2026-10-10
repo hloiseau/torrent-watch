@@ -7,3 +7,9 @@
 
 .sort-button{font:inherit;letter-spacing:inherit;color:inherit;background:none;border:0;padding:4px 0;text-align:left}.sort-button:hover,.sort-button.sort-active{color:var(--mint)}.sort-arrow{font-size:11px;letter-spacing:0}.mobile-sort{display:none}select:focus-visible{outline:2px solid var(--mint);outline-offset:3px}
 @media(max-width:650px){.mobile-sort{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:11px;color:var(--muted)}.mobile-sort select{flex:1;min-width:0}.mobile-sort select,.mobile-sort button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:10px 8px}.mobile-sort button{white-space:nowrap;color:var(--mint)}}
+
+/* Separate speed columns: the whole heading button is a sort target. */
+th:first-child{width:38%}th:nth-child(2){width:16%}th:nth-child(3){width:14%}th:nth-child(4),th:nth-child(5){width:9%}th:last-child{width:14%}
+th.speed-heading{padding:0}.speed-heading .sort-button{display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;min-height:74px;padding:17px 15px;font-size:11px;letter-spacing:0;line-height:1.5}.speed-heading .sort-arrow{flex-shrink:0}
+@media(min-width:651px) and (max-width:1000px){.table-wrap{overflow-x:auto}table{min-width:800px}}
+@media(max-width:650px){tr{grid-template-columns:repeat(2,minmax(0,1fr))}.speed-cell,.count-cell{padding:12px 0}.upload-speed-cell,.count-cell:nth-child(5){padding-left:14px}.speed-cell strong{font-size:12px}.speed-cell::before{line-height:1.5}.count-cell{margin-top:4px}}

@@ -41,6 +41,11 @@ try {
  await page.getByText('Finish Plex login').click();
  await page.locator('#torrent-list tr').first().waitFor();
  assert.equal(await page.locator('#torrent-list tr').count(),4);
+ assert.equal(await page.locator('thead th').count(),6);
+ assert.equal(await page.locator('th.speed-heading').count(),2);
+ assert.equal(await page.locator('#torrent-list tr').first().locator('td').count(),6);
+ assert.match(await page.locator('.download-speed-cell').first().textContent(), /12 Mio\/s/);
+ assert.match(await page.locator('.upload-speed-cell').first().textContent(), /829/);
  const titles = () => page.locator('#torrent-list .torrent-name').allTextContents();
  await page.locator('[data-sort="name"]').focus();
  await page.keyboard.press('Enter');
@@ -74,6 +79,8 @@ try {
  assert.equal(await page.locator('#torrent-list tr').count(),6);
  await page.locator('[data-sort="uploadSpeed"]').click();
  assert.match((await titles())[0], /^Cosmos/, 'seeding torrents can sort first by upload speed');
+ assert.equal(await page.locator('th.speed-heading').nth(0).getAttribute('aria-sort'), 'none');
+ assert.equal(await page.locator('th.speed-heading').nth(1).getAttribute('aria-sort'), 'descending');
  await page.locator('[data-sort="uploadSpeed"]').click();
  assert.equal((await titles())[0], '<img src=x onerror="window.INJECTED=true">');
  await page.locator('[data-sort="peersConnected"]').click();
@@ -90,6 +97,10 @@ try {
  await page.locator('#search').fill('');
  await page.locator('[data-filter="pending"]').click();
  await page.setViewportSize({width:390,height:844});
+ assert.equal(await page.locator('#sort-field option[value="downloadSpeed"]').textContent(), 'Vitesse de téléchargement');
+ assert.equal(await page.locator('#sort-field option[value="uploadSpeed"]').textContent(), 'Vitesse d’upload');
+ assert.equal(await page.locator('.download-speed-cell').first().getAttribute('data-label'), 'Vitesse de téléchargement');
+ assert.equal(await page.locator('.upload-speed-cell').first().getAttribute('data-label'), 'Vitesse d’upload');
  await page.locator('#sort-field').selectOption('name');
  assert.match((await titles())[0], /^Big Buck/);
  await page.locator('#sort-direction').click();

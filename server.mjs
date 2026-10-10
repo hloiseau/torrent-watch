@@ -103,10 +103,15 @@ export function createQbitClient(config) {
       method: 'POST',
       body: new URLSearchParams({ username: config.qbitUsername, password: config.qbitPassword }),
     });
-    if (!response.ok || (await limitedText(response, 4096)).trim() !== 'Ok.') throw new Error('qBittorrent authentication failed');
-    const cookie = response.headers.getSetCookie().find(c => c.startsWith('SID='));
-    const value = cookie?.split(';', 1)[0];
-    if (!value || !/^SID=[A-Za-z0-9_-]+$/.test(value)) throw new Error('qBittorrent did not return a session; disable authentication bypass for this client');
+    const body = (await limitedText(response, 4096)).trim();
+    // qBittorrent 5.2 uses 204 and a port-scoped QBT_SID_<port> cookie.
+    // Older versions return 200 + 'Ok.' and SID. Keep failures fail-closed.
+    if (response.status !== 204 && !(response.status === 200 && body === 'Ok.')) throw new Error('qBittorrent authentication failed');
+    const value = response.headers.getSetCookie()
+      .map(cookie => cookie.split(';', 1)[0].trim())
+      .find(cookie => /^(?:SID|QBT_SID_[0-9]{1,5})=[A-Za-z0-9_-]+$/.test(cookie));
+    if (!value) throw new Error('qBittorrent did not return a session; disable authentication bypass for this client');
+    // Use the cookie name sent by qBittorrent, not the externally mapped port.
     sid = value;
   }
   async function refresh() {

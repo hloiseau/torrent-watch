@@ -245,3 +245,52 @@ test('upstream redirects never receive credentials at another origin', async t =
   await assert.rejects(client.getSnapshot());
   assert.equal(leaked, 0);
 });
+
+test('qBittorrent 5.2 login uses 204 and its port-scoped cookie, including after expiry', async t => {
+  let logins = 0;
+  let reads = 0;
+  const fake = http.createServer((req, res) => {
+    if (req.url === '/api/v2/auth/login') {
+      logins++;
+      res.writeHead(204, { 'Set-Cookie': ['unrelated=ignore; Path=/', `QBT_SID_8080=session${logins}; HttpOnly; Path=/; SameSite=Strict`] });
+      return res.end();
+    }
+    assert.equal(req.url, '/api/v2/torrents/info');
+    assert.equal(req.method, 'GET');
+    assert.equal(req.headers.cookie, `QBT_SID_8080=session${logins}`);
+    reads++;
+    if (reads === 1) { res.writeHead(403); return res.end(); }
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify([
+      { name: 'Downloading', state: 'downloading', progress: 0.5, dlspeed: 100, num_seeds: 2 },
+      { name: 'Seeding', state: 'uploading', progress: 1, upspeed: 100, num_leechs: 3 },
+    ]));
+  });
+  const url = await start(fake, t);
+  const client = createQbitClient(loadConfig({ ...base, QBIT_URL: url }));
+  const snapshot = await client.getSnapshot();
+  assert.equal(logins, 2);
+  assert.equal(reads, 2);
+  assert.deepEqual(snapshot.torrents.map(t => t.state), ['downloading', 'uploading']);
+  assert.equal(snapshot.torrents[1].uploadSpeed, 100);
+});
+
+test('qBittorrent login rejects failed credentials and missing or unrelated session cookies', async t => {
+  for (const [status, body, cookie] of [
+    [200, 'Fails.', 'SID=must-not-use'],
+    [401, '', 'QBT_SID_8080=must-not-use'],
+    [403, '', 'SID=must-not-use'],
+    [200, 'Ok.', 'unrelated=value'],
+    [204, '', null],
+    [204, '', 'QBT_SID_bad=value'],
+    [204, '', 'QBT_SID_8080='],
+  ]) {
+    const url = await start(http.createServer((req, res) => {
+      assert.equal(req.url, '/api/v2/auth/login');
+      res.writeHead(status, cookie ? { 'Set-Cookie': cookie } : {});
+      res.end(body);
+    }), t);
+    const client = createQbitClient(loadConfig({ ...base, QBIT_URL: url }));
+    await assert.rejects(client.getSnapshot(), /qBittorrent/);
+  }
+});

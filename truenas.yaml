@@ -1,15 +1,14 @@
 # Build the local image first (README), then use Apps > Install via YAML.
-# Replace the example LAN IP and credentials. No external image has been published.
+# Replace the example LAN IP and credentials.
 services:
   torrent-watch:
-    image: torrent-watch:0.1.0
+    image: torrent-watch:0.2.0
     pull_policy: never
     restart: unless-stopped
     init: true
     environment:
       PUBLIC_ORIGIN: https://suivi.hugoloiseau.fr
-      VIEWER_USERNAME: ami
-      VIEWER_PASSWORD: CHANGE_ME_WITH_A_UNIQUE_RANDOM_PASSWORD
+      PLEX_SERVER_ID: CHANGE_ME_PLEX_MACHINE_IDENTIFIER
       QBIT_URL: http://192.168.1.10:8080
       QBIT_USERNAME: admin
       QBIT_PASSWORD: CHANGE_ME_QBIT_PASSWORD

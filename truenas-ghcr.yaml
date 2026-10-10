@@ -1,16 +1,14 @@
-# Public GHCR image: ghcr.io/hloiseau/torrent-watch:0.1.0
-# Anonymous manifest access verified on 2026-10-10.
+# Public GHCR image: ghcr.io/hloiseau/torrent-watch:0.2.0
 # Replace 192.168.1.10 with your NAS LAN IP and 8080 with the qBittorrent WebUI port.
 services:
   torrent-watch:
-    image: ghcr.io/hloiseau/torrent-watch:0.1.0
+    image: ghcr.io/hloiseau/torrent-watch:0.2.0
     pull_policy: always
     restart: unless-stopped
     init: true
     environment:
       PUBLIC_ORIGIN: https://suivi.hugoloiseau.fr
-      VIEWER_USERNAME: ami
-      VIEWER_PASSWORD: CHANGE_ME_WITH_A_UNIQUE_RANDOM_PASSWORD
+      PLEX_SERVER_ID: CHANGE_ME_PLEX_MACHINE_IDENTIFIER
       QBIT_URL: http://192.168.1.10:8080
       QBIT_USERNAME: admin
       QBIT_PASSWORD: CHANGE_ME_QBIT_PASSWORD

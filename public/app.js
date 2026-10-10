@@ -119,7 +119,7 @@ async function refresh() {
     render();
   } catch (error) {
     if (generation !== current) return;
-    if (error.status === 401) return showLogin();
+    if ([401, 403, 503].includes(error.status)) { showLogin(); $('login-error').textContent = error.message; return; }
     $('connection').textContent = lastUpdate ? `● Hors ligne · dernières données à ${lastUpdate.toLocaleTimeString('fr-FR')}` : '● Connexion indisponible';
     $('connection').className = 'offline';
     $('error-banner').textContent = error.status === 502 ? error.message : 'Le suivi est inaccessible. Nouvel essai automatique dans quelques secondes.';
@@ -131,9 +131,8 @@ $('login-form').addEventListener('submit', async event => {
   $('login-button').disabled = true;
   $('login-error').textContent = '';
   try {
-    await api('/api/login', { username: $('username').value, password: $('password').value });
-    $('password').value = '';
-    showDashboard();
+    const data = await api('/api/auth/plex/start', {});
+    window.location.assign(data.authUrl);
   } catch (error) { $('login-error').textContent = error.status ? error.message : 'Impossible de joindre le serveur.'; }
   finally { $('login-button').disabled = false; }
 });
@@ -150,4 +149,24 @@ $('search').addEventListener('input', render);
 $('refresh').addEventListener('click', refresh);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 setInterval(refresh, 5000);
-api('/api/session').then(showDashboard).catch(showLogin);
+async function bootstrap() {
+  const returning = new URLSearchParams(location.search).get('plex') === 'return';
+  if (returning) history.replaceState(null, '', '/');
+  try { await api('/api/session'); showDashboard(); return; }
+  catch (error) {
+    if (!returning) { showLogin(); if (error.status !== 401) $('login-error').textContent = error.message; return; }
+  }
+  showLogin();
+  $('login-button').disabled = true;
+  try {
+    for (let i = 0; i < 15; i++) {
+      $('login-error').textContent = 'Vérification de ton accès Plex…';
+      const result = await api('/api/auth/plex/status', {});
+      if (result.authenticated) { $('login-error').textContent = ''; showDashboard(); return; }
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    $('login-error').textContent = 'Connexion non terminée. Réessaie avec Plex.';
+  } catch (error) { $('login-error').textContent = error.status ? error.message : 'Impossible de joindre le serveur.'; }
+  finally { $('login-button').disabled = false; }
+}
+bootstrap();

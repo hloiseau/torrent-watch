@@ -1,89 +1,38 @@
 # Torrent Watch
 
-Un tableau de bord indépendant pour laisser un proche suivre les téléchargements du serveur, sans lui donner accès à qBittorrent. Interface française, adaptée au téléphone, thème sombre.
+Un tableau de bord en lecture seule pour suivre qBittorrent sans exposer sa WebUI. Interface française, adaptée au téléphone : progression, débits, seeds, peers, état et temps restant.
 
-**Version 0.1.0** · Application indépendante, sans accès aux fichiers de médias.
+**Version 0.2.0 : connexion avec Plex.** Seuls les comptes ayant accès au serveur Plex configuré peuvent consulter les téléchargements. Le compte de consultation partagé de la version 0.1.0 est supprimé.
 
-La CI publie l’image `ghcr.io/hloiseau/torrent-watch:0.1.0` après validation des tests. Pour installer l’image publiée, utiliser [`truenas-ghcr.yaml`](truenas-ghcr.yaml). La section ci-dessous décrit aussi la construction locale.
+## Installation sur TrueNAS SCALE 25.10
 
-## Fonctionnement
+Image : `ghcr.io/hloiseau/torrent-watch:0.2.0` (Linux amd64). Le workflow publie cette version et `latest` après réussite des tests serveur et navigateur.
 
-- Connexion avec un compte de consultation, distinct de qBittorrent.
-- Titres, progression, taille, débit descendant/montant, temps restant, état, seeds et peers (connectés / connus).
-- Filtres En cours / Tout / Terminés et recherche par titre.
-- Rafraîchissement toutes les 5 secondes, suspendu quand l’onglet est masqué.
-- Les requêtes simultanées partagent le même appel qBittorrent ; cache de 5 secondes, y compris en cas de panne.
-- Filtre de catégories appliqué **sur le serveur**, avant transmission au navigateur.
-- Aucune commande d’ajout, de pause, de suppression ou de configuration.
-- Aucun accès aux fichiers de médias, à Plex, à Sonarr/Radarr, ni au socket Docker.
+1. Récupérer le `machineIdentifier` de ton serveur Plex depuis le réseau local :
 
-Le navigateur contacte Torrent Watch. Le serveur Torrent Watch contacte l’API de qBittorrent en réseau privé. Les identifiants qBittorrent et sa session restent côté serveur. L’application ne relaie jamais une URL ou une route API envoyée par un visiteur.
+   ```bash
+   curl -fsS http://IP_DU_NAS:PORT_PLEX/identity
+   ```
 
-L’interface publique expose uniquement sa page de connexion ; les données nécessitent une session. Aucun CDN, police distante, analytics ou ressource externe.
+   Le port Plex est généralement `32400`. Copier la valeur de `machineIdentifier` dans la réponse XML/JSON. Cet endpoint ne demande pas de token. Il faut l’identifiant, pas le nom du serveur, ni un `X-Plex-Token`. Si l’accès HTTP local est désactivé, utiliser l’URL HTTPS locale appropriée.
 
-## Installation TrueNAS SCALE 25.10 — image GHCR (recommandé)
+2. Dans **Apps → Discover Apps → menu ⋮ → Install via YAML**, nommer l’application `torrent-watch` et coller [`truenas-ghcr.yaml`](truenas-ghcr.yaml).
+3. Remplacer les valeurs ci-dessous et conserver les protections du conteneur.
+4. Configurer Caddy avec [`Caddyfile.example`](Caddyfile.example), puis ouvrir l’adresse HTTPS publique.
+5. Cliquer sur **Se connecter avec Plex**, autoriser Torrent Watch chez Plex et revenir au tableau de bord.
 
-Image publiée : **`ghcr.io/hloiseau/torrent-watch:0.1.0`** (Linux amd64). Le téléchargement sans identifiants GHCR a été vérifié. Pas de construction locale nécessaire.
-
-1. Dans **Apps → Discover Apps → menu ⋮ → Install via YAML**, coller [`truenas-ghcr.yaml`](truenas-ghcr.yaml).
-2. Remplacer l’IP LAN du NAS, le port et les identifiants de la WebUI qBittorrent, puis choisir un mot de passe de consultation unique d’au moins 16 caractères.
-3. Adapter `PUBLIC_ORIGIN` au domaine HTTPS utilisé dans Caddy ; ajouter le bloc de [`Caddyfile.example`](Caddyfile.example).
-4. Optionnel : configurer `QBIT_CATEGORIES` avec la liste exacte des catégories à partager.
-5. Accéder à l’adresse HTTPS et se connecter avec le compte de consultation. Aucun volume de médias ni accès Docker n’est nécessaire.
-
-Ne pas rediriger le port 5080 ou la WebUI qBittorrent sur la box : seul Caddy reçoit le trafic Internet. Les identifiants de qBittorrent restent côté serveur. Pour des mots de passe contenant `$`, écrire `$$` dans le YAML Compose.
-
-**Validation du 10 octobre 2026 :** 10 tests serveur, parcours navigateur à 1440 px et 390 px, construction Docker et publication GHCR réussis dans [GitHub Actions](https://github.com/hloiseau/torrent-watch/actions/runs/38082394347). La connexion au véritable qBittorrent reste à vérifier lors de l’installation.
-
-## Variante : construire l’image localement sur TrueNAS
-
-### 1. Construire l’image locale
-
-Décompresser l’archive dans un dataset dédié, par exemple `/mnt/tank/apps/torrent-watch`. Adapter `tank` à ton pool. Depuis le shell TrueNAS ou SSH, dans le dossier qui contient `Dockerfile` :
-
-```bash
-cd /mnt/tank/apps/torrent-watch
-sudo docker build -t torrent-watch:0.1.0 .
-```
-
-Cette construction télécharge l’image officielle Node 24 Alpine. Le projet n’installe aucune dépendance npm. Il ne faut pas installer Node ni npm sur TrueNAS.
-
-Si tu construis l’image sur un autre ordinateur, utilise la même architecture que le NAS (ton Ryzen : amd64), puis transfère-la avec `docker save` / `docker load`.
-
-### 2. Ajouter l’application
-
-Dans **Apps → Discover Apps → menu ⋮ → Install via YAML**, donner par exemple le nom `torrent-watch`, puis coller le contenu de `truenas.yaml`.
-
-Remplacer ces valeurs **avant** l’installation :
-
-| Valeur | À renseigner |
+| Variable | Valeur |
 |---|---|
-| `PUBLIC_ORIGIN` | L’adresse HTTPS publique exacte, sans chemin : par exemple `https://suivi.hugoloiseau.fr` |
-| `VIEWER_USERNAME` | L’identifiant à donner au proche ; `ami` par défaut |
-| `VIEWER_PASSWORD` | Un mot de passe unique et aléatoire d’au moins 16 caractères, distinct de qBittorrent |
-| `QBIT_URL` | L’URL de la WebUI qBittorrent, joignable depuis ce nouveau conteneur |
-| `QBIT_USERNAME`, `QBIT_PASSWORD` | Les identifiants de la WebUI qBittorrent |
-| `192.168.1.10:5080:5080` | Remplacer l’IP par celle du NAS sur le LAN, pour que Caddy puisse atteindre le service |
+| `PUBLIC_ORIGIN` | L’adresse HTTPS publique exacte, sans chemin, par exemple `https://suivi.hugoloiseau.fr` |
+| `PLEX_SERVER_ID` | Le `machineIdentifier` obtenu ci-dessus ; obligatoire |
+| `QBIT_URL` | L’URL privée de la WebUI qBittorrent, joignable depuis le conteneur |
+| `QBIT_USERNAME`, `QBIT_PASSWORD` | Les identifiants de cette WebUI |
+| `QBIT_CATEGORIES` | Facultatif : liste JSON exacte des catégories visibles, par exemple `'["radarr","sonarr"]'` |
+| `192.168.1.10:5080:5080` | Remplacer l’IP par celle du NAS sur le LAN, joignable depuis Caddy |
 
-`QBIT_URL` peut par exemple être `http://IP_DU_NAS:PORT_WEBUI`. **Ce n’est pas le port BitTorrent.** Si qBittorrent est derrière Gluetun, utiliser le port WebUI accessible du conteneur VPN ou celui publié sur le NAS. `localhost` dans Torrent Watch désigne Torrent Watch, pas le NAS ni qBittorrent.
+`QBIT_URL` utilise le port **WebUI**, pas le port BitTorrent. Si qBittorrent est derrière Gluetun, utiliser le port WebUI publié par le conteneur VPN ou sur le NAS. `localhost` désigne le conteneur Torrent Watch, pas le NAS.
 
-Le YAML utilise `pull_policy: never` : l’image `torrent-watch:0.1.0` doit déjà exister localement. Elle n’est pas disponible sur Docker Hub/GHCR. Ne pas supprimer cette image lors d’un nettoyage des images inutilisées ; conserver les sources pour pouvoir la reconstruire.
-
-### 3. Restreindre ce qui est visible
-
-Par défaut, **tous les torrents sont visibles**, y compris ceux ajoutés manuellement. Pour partager uniquement les films et séries, activer cette variable :
-
-```yaml
-QBIT_CATEGORIES: '["radarr","sonarr"]'
-```
-
-Les noms doivent correspondre exactement aux catégories qBittorrent (majuscules comprises). Si tes catégories sont `movies` et `tv`, utiliser ces noms. Une catégorie absente de la liste n’est jamais envoyée au navigateur, même en modifiant ses requêtes. La catégorie vide peut être autorisée avec `""`. Un filtre vide ou mal formé est refusé au démarrage pour éviter d’ouvrir accidentellement l’accès à tout.
-
-Ce n’est pas une intégration Seerr : tous les visiteurs autorisés voient la même sélection, pas uniquement leurs propres demandes.
-
-### 4. Publier uniquement Torrent Watch avec Caddy
-
-Ajouter le bloc de `Caddyfile.example` à ta configuration existante, en adaptant le domaine et l’IP :
+Exemple Caddy :
 
 ```caddyfile
 suivi.hugoloiseau.fr {
@@ -91,84 +40,105 @@ suivi.hugoloiseau.fr {
 }
 ```
 
-Configurer le DNS et l’accès HTTPS comme pour tes autres services. Seul Caddy doit être accessible depuis Internet. **Ne pas ouvrir les ports 5080 ni la WebUI qBittorrent sur la box.** La publication LAN du port 5080 sert à joindre Torrent Watch depuis Caddy ; elle n’est pas une redirection de port Internet.
+Seul Caddy doit recevoir le trafic Internet. Ne pas rediriger le port 5080 ni la WebUI qBittorrent sur la box. Aucun volume de médias, accès au socket Docker, token propriétaire Plex ou base de données n’est nécessaire. Le conteneur doit pouvoir joindre `plex.tv` en HTTPS ; le navigateur du visiteur doit pouvoir joindre `app.plex.tv`.
 
-Si Caddy et Torrent Watch partagent un réseau Docker, on peut supprimer `ports`, rattacher Torrent Watch à ce réseau externe et utiliser `reverse_proxy torrent-watch:5080`. Ne pas déclarer un nom de réseau inexistant : reprendre celui de ton installation.
+Si Caddy et Torrent Watch partagent un réseau Docker, il est possible de supprimer `ports`, de déclarer ce réseau existant et d’utiliser `reverse_proxy torrent-watch:5080`.
 
-Conserver les protections CSRF et Host de qBittorrent. Ne pas désactiver l’authentification pour l’adresse du conteneur Torrent Watch : le client attend un cookie de session après connexion. En cas d’erreur Host, configurer qBittorrent pour accepter le nom réellement utilisé dans `QBIT_URL`, sans désactiver la validation globalement.
+### Mise à jour depuis 0.1.0
 
-### 5. Vérifier avant de partager
+Dans la configuration de l’app, remplacer l’image par `ghcr.io/hloiseau/torrent-watch:0.2.0`, supprimer `VIEWER_USERNAME` et `VIEWER_PASSWORD`, ajouter `PLEX_SERVER_ID`, puis redéployer. Les autres réglages restent identiques. Les anciennes sessions sont invalidées au redémarrage ; le mot de passe partagé ne permet plus de se connecter.
 
-1. Ouvrir l’URL HTTPS en navigation privée : aucun torrent ne doit apparaître avant connexion.
-2. Se connecter avec le compte de consultation et comparer les seeds/peers et la progression à qBittorrent.
-3. Si un filtre de catégories est défini, vérifier qu’un torrent d’une autre catégorie est absent.
-4. Tester la déconnexion et constater que le suivi redemande l’identifiant.
-5. Donner uniquement l’URL publique et le compte de consultation au proche.
+## Qui peut consulter le suivi ?
 
-La sonde `/healthz` indique que le serveur HTTP fonctionne. Elle ne garantit pas la disponibilité de qBittorrent. L’interface signale une panne et date les dernières données conservées.
+- Le propriétaire du serveur Plex configuré et les comptes Plex auxquels ce serveur est partagé.
+- Un compte ayant seulement accès à un autre serveur est refusé. La vérification compare l’identifiant exact, jamais le nom du serveur.
+- Chaque visiteur utilise son propre compte Plex. Les profils gérés Plex Home sans connexion Plex personnelle et le changement de profil Home ne sont pas pris en charge.
+- Tous les visiteurs autorisés voient **la même sélection qBittorrent**. Les restrictions de bibliothèques Plex ne sont pas traduites en catégories de torrents, et le suivi ne se limite pas aux demandes personnelles Seerr.
 
-Référence TrueNAS : https://www.truenas.com/docs/scale/25.10/scaleuireference/apps/
+**Sans `QBIT_CATEGORIES`, tous les torrents sont visibles**, y compris les ajouts manuels. Pour ne partager que certains téléchargements, définir par exemple :
 
-## Variante Docker Compose hors interface TrueNAS
-
-```bash
-cp .env.example .env
-chmod 600 .env
-# Renseigner les vraies valeurs dans .env.
-docker compose up -d --build
+```yaml
+QBIT_CATEGORIES: '["radarr","sonarr"]'
 ```
 
-Le port est lié à `127.0.0.1` par défaut. Pour un Caddy dans un conteneur séparé, adapter `BIND_IP` à l’IP LAN du NAS ou utiliser un réseau Docker commun. Ne pas utiliser en même temps Compose à la main et l’app TrueNAS pour gérer la même instance.
+Les noms doivent correspondre exactement aux catégories qBittorrent. Un filtre vide ou mal formé bloque le démarrage. Le filtrage est effectué côté serveur avant toute transmission au navigateur.
 
-En YAML ou dans `.env`, attention aux `$` interprétés par Compose : utiliser `$$` dans le YAML, ou des valeurs entre apostrophes dans `.env`. Pour un nouveau mot de passe de consultation, un secret aléatoire hexadécimal évite ce problème. Ne jamais committer les vraies valeurs.
+## Connexion et contrôle d’accès Plex
 
-## Secrets montés en fichiers (facultatif)
+Le serveur crée un PIN fort via l’API Plex officielle. Le navigateur est redirigé vers Plex pour s’authentifier : Torrent Watch ne reçoit jamais le mot de passe Plex. Au retour, le backend récupère le token de l’utilisateur et vérifie la liste de ses serveurs autorisés. Le PIN est lié au navigateur initiateur par un cookie HttpOnly, expire après cinq minutes maximum et est consommé une seule fois. Aucun PIN ou token choisi par le navigateur n’est accepté.
 
-Les deux mots de passe acceptent aussi `VIEWER_PASSWORD_FILE` et `QBIT_PASSWORD_FILE`. Monter les fichiers en lecture seule, les rendre lisibles par l’utilisateur `node` (UID 1000) et configurer leurs chemins internes. Ne pas définir simultanément une variable de mot de passe et sa variante `_FILE`. Cela évite de placer les mots de passe directement dans le YAML ; ils restent lisibles par l’application et l’administrateur du NAS.
+La session dure 12 heures maximum. À chaque appel protégé, une autorisation vieille de cinq minutes est revérifiée auprès de Plex. Retirer le partage ou révoquer l’app chez Plex coupe donc les nouveaux accès au suivi à la prochaine vérification, sous réserve du délai de propagation chez Plex. Les informations déjà consultées ne peuvent évidemment pas être retirées de la mémoire du visiteur.
 
-Les mots de passe configurés en environnement restent visibles aux administrateurs du conteneur. Ils ne sont ni renvoyés dans l’API, ni enregistrés dans les logs.
+Si Plex ne répond pas lors d’une vérification requise, le suivi est bloqué jusqu’à une vérification réussie. Si Plex refuse l’accès, la session locale est supprimée. Déconnexion et redémarrage effacent les sessions et tokens conservés en mémoire. La déconnexion locale ne révoque pas l’autorisation de l’app dans le compte Plex ; le visiteur peut la retirer dans les appareils autorisés Plex.
 
-## Développement et tests
+Le flux PIN traditionnel documenté par Plex est utilisé. Son token de compte n’est pas un token limité à la lecture de ce tableau de bord : il reste exclusivement côté serveur, en mémoire, sans être envoyé au navigateur, écrit sur disque ou journalisé. L’application utilise uniquement les endpoints Plex de connexion, d’identité et de liste des ressources. Elle ne contacte pas les URL des serveurs retournées par Plex et ne lit aucun média.
 
-Node.js 24 ou plus récent, aucune installation npm nécessaire :
+Cookies : session `__Host-`, Secure, HttpOnly et SameSite=Strict ; cookie temporaire de connexion SameSite=Lax pour permettre le retour depuis Plex. Toutes les actions nécessitent l’origine configurée. HTTPS est requis pour le déploiement partagé.
+
+Référence : [authentification et identité dans la documentation Plex](https://developer.plex.tv/pms/).
+
+## Lecture seule qBittorrent
+
+Le navigateur contacte uniquement Torrent Watch pour les données. Le backend ne possède que deux appels qBittorrent : connexion et lecture de la liste des torrents. Aucune route d’ajout, pause, suppression, réglage ou proxy générique n’est exposée. Les identifiants, hashes, chemins, liens magnet, trackers et IP des peers ne sont pas transmis.
+
+Les identifiants qBittorrent peuvent avoir des droits d’écriture : la lecture seule est imposée par les routes de Torrent Watch, pas par un rôle qBittorrent. Conserver le conteneur sous ton seul contrôle administratif.
+
+Conserver les protections CSRF, Host et l’authentification qBittorrent. Ne pas activer le contournement de connexion pour Torrent Watch : le client attend un cookie SID. En cas d’erreur Host, autoriser le nom utilisé dans `QBIT_URL` sans désactiver globalement la validation.
+
+Rafraîchissement toutes les cinq secondes, suspendu si l’onglet est masqué. Les requêtes simultanées partagent un cache qBittorrent de cinq secondes. Lors d’une panne qBittorrent, l’interface conserve les anciennes données et leur date ; un refus ou une panne de vérification Plex masque le tableau de bord.
+
+Seeds et peers indiquent les nombres connectés / connus dans l’essaim, sans promesse de disponibilité. « — » indique une valeur inconnue. Un téléchargement à 100 % peut encore attendre l’importation Sonarr/Radarr ou l’indexation Plex.
+
+## Secrets et limites
+
+- `QBIT_PASSWORD_FILE` permet de lire le mot de passe dans un fichier monté en lecture seule, lisible par UID 1000. Ne pas définir simultanément `QBIT_PASSWORD` et sa variante `_FILE`.
+- Dans un YAML Compose, écrire `$$` pour un `$` littéral dans un mot de passe ; dans `.env`, utiliser des apostrophes. Ne pas committer les vraies valeurs.
+- Les administrateurs du conteneur peuvent lire ses variables d’environnement et sa mémoire.
+- Création de connexion limitée à 10 / 15 minutes par adresse réseau et 20 / minute au total. Les adresses transférées sont ignorées ; derrière Caddy, les visiteurs partagent le quota de son adresse. Les sessions existantes restent utilisables.
+- Une requête de vérification PIN toutes les deux secondes maximum par connexion ; vérifications Plex simultanées regroupées par session, erreurs temporisées dix secondes.
+- Pas d’historique persistant, notifications, contrôle qBittorrent ou intégration des demandes Seerr.
+- `/healthz` indique que le serveur HTTP fonctionne, pas que Plex ou qBittorrent sont disponibles.
+
+## Développement et validation
+
+Node.js 24, aucune dépendance npm de production :
 
 ```bash
 npm test
-# Pour un essai sur sa propre machine : copier et adapter .env.example.
-# PUBLIC_ORIGIN=http://localhost:5080 et COOKIE_SECURE=false, puis :
+cp .env.example .env
+# Renseigner les valeurs ; HTTP local uniquement :
+# PUBLIC_ORIGIN=http://localhost:5080 et COOKIE_SECURE=false
 node --env-file=.env server.mjs
 ```
 
-Le mode HTTP est réservé aux tests sur un réseau de confiance : le mot de passe transite sans chiffrement. Le déploiement partagé utilise HTTPS, avec un cookie `__Host-`, Secure, HttpOnly et SameSite=Strict.
+Les tests couvrent les refus anonymes, le serveur Plex exact, le PIN lié au navigateur, son expiration et sa consommation unique, les cookies, CSRF, limites de connexion, révocation du partage, pannes Plex, absence de fuite de tokens, déconnexion et les protections qBittorrent. Les services Plex et qBittorrent sont simulés ; la connexion à ton NAS reste à vérifier sur place.
 
-La suite automatise les scénarios suivants : refus d’accès anonyme, connexion/déconnexion, absence de commandes d’écriture, origine des requêtes, limitation des tentatives, projection des champs publics, filtre de catégories, cache partagé, reconnexion qBittorrent, erreurs sans fuite de secrets et refus des redirections amont. Elle utilise un faux serveur qBittorrent ; aucun torrent réel n’est modifié.
-
-Test navigateur facultatif (sur une machine de développement, pas sur TrueNAS) :
+Test navigateur de développement :
 
 ```bash
-npm install --no-save --package-lock=false playwright
+npm install --no-save --package-lock=false playwright@1.62.1
 npx playwright install chromium
 npm run test:browser
 ```
 
-Le script utilise uniquement des données fictives et un serveur local éphémère. Il vérifie la connexion, les filtres, la recherche, l’échappement des titres, la panne amont, la déconnexion et l’absence de débordement horizontal à 390 px. Il produit des captures ordinateur/mobile dans `test-results/`. Les tests navigateur et les 10 tests serveur ont été exécutés avec succès dans GitHub Actions. Les captures ordinateur et mobile ont également été inspectées.
+Ce test local simule le passage chez Plex, vérifie les vues 1440 px / 390 px, filtres, recherche, échappement des titres, panne qBittorrent et déconnexion. La CI produit des captures dans l’artefact `browser-screenshots`.
 
-## Limites assumées de cette première version
+Avant de partager : vérifier un compte autorisé, un compte sans accès au serveur, les catégories visibles et la révocation d’un partage après cinq minutes. Ces tests réels complètent les simulations automatiques.
 
-- Un compte de consultation partagé. Changer son mot de passe et redémarrer invalide toutes les sessions ; toutes les sessions sont perdues au redémarrage. Pas de base de données.
-- Session de 12 h. Pas d’inscription, de récupération de mot de passe ou d’authentification Plex dans cette application séparée.
-- Le backend utilise les identifiants qBittorrent habituels, qui peuvent avoir des droits d’écriture. Le caractère lecture seule est imposé par les routes de Torrent Watch, pas par un rôle qBittorrent. Le conteneur ne doit être accessible en administration qu’à toi.
-- Connexion limitée à 10 tentatives / 15 min par adresse réseau, avec un plafond global de 20 / minute et 2 vérifications de mot de passe simultanées. Les en-têtes d’IP transférée sont ignorés. Derrière Caddy, les visiteurs partagent volontairement le quota de son adresse ; des échecs répétés peuvent donc bloquer temporairement toutes les nouvelles connexions, sans interrompre les sessions existantes.
-- Connexion qBittorrent par identifiant/mot de passe et cookie SID ; pas de support d’une authentification intermédiaire supplémentaire ou d’un chemin API différent. API v2 compatible avec les champs des versions 4.1+ et 5.x, à confirmer sur ton instance réelle.
-- Seeds/peers = nombre connecté / nombre connu dans l’essaim, pas promesse de sources joignables. `—` indique une donnée inconnue et le temps restant peut être indisponible. Aucun affichage d’IP ou de détail individuel des peers.
-- Le téléchargement à 100 % ne garantit pas l’importation par Sonarr/Radarr ni l’indexation dans Plex.
-- Pas d’historique persistant, de notifications, ni de contrôle du client. Liste limitée à 20 000 torrents / 8 Mio de réponse upstream pour borner l’usage mémoire.
-- La construction Docker et le téléchargement anonyme de l’image ont été validés. Le déploiement sur le NAS et la connexion à son qBittorrent restent à vérifier sur ton installation.
+## Construction locale et publication
 
-## Publication GitHub / GHCR
+Pour construire sur le NAS, depuis un dataset contenant les sources :
 
-Le projet est indépendant de LibraryDownloadarr et peut être poussé dans un nouveau dépôt public `hloiseau/torrent-watch`. Le workflow `Publish image` se déclenche sur les pushes de `main` (ou manuellement). Il exécute les tests serveur et navigateur, construit l’image Docker, puis publie les tags `0.1.0`, `latest` et `sha-<commit>` sur `ghcr.io/<propriétaire>/<dépôt>` avec le `GITHUB_TOKEN` du workflow. La CI de pull request vérifie les tests serveur et la construction sans publier.
+```bash
+sudo docker build -t torrent-watch:0.2.0 .
+```
 
-La première publication d’un package GHCR peut être privée, même avec un dépôt public. Rendre le package public dans ses réglages avant de l’utiliser sans identifiants sur TrueNAS. Une fois le workflow réussi et la visibilité vérifiée, utiliser `truenas-ghcr.yaml`. Ce YAML cible l’image publique `ghcr.io/hloiseau/torrent-watch:0.1.0`, dont le téléchargement anonyme a été vérifié le 10 octobre 2026. L’ancienne variante `truenas.yaml` reste disponible pour une image construite localement.
+Utiliser alors [`truenas.yaml`](truenas.yaml), avec `pull_policy: never`. Cette variante attend l’image locale. Ne pas installer Node/npm sur TrueNAS.
+
+Pour Docker Compose hors interface TrueNAS : adapter `.env.example`, le copier en `.env`, puis `docker compose up -d --build`. Le port est lié à `127.0.0.1` par défaut ; adapter `BIND_IP` si Caddy est dans un autre conteneur. Ne pas faire gérer la même instance par Compose et l’app TrueNAS simultanément.
+
+Le workflow [Publish image](https://github.com/hloiseau/torrent-watch/actions/workflows/publish.yml) teste, construit et publie les tags `0.2.0`, `latest` et `sha-<commit>` sur chaque push de `main`. Le package GHCR est public. Le tag `0.1.0` conserve l’ancienne version à mot de passe partagé.
+
+Référence [interface Apps TrueNAS 25.10](https://www.truenas.com/docs/scale/25.10/scaleuireference/apps/).
 
 Licence Apache 2.0 (voir [LICENSE](LICENSE)).

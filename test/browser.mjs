@@ -5,8 +5,7 @@ import { createApp, loadConfig } from '../server.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 mkdirSync(new URL('../test-results/', import.meta.url), { recursive: true });
-const password = 'temporary-qa-password-123456';
-const config = loadConfig({ VIEWER_PASSWORD: password, QBIT_URL: 'http://localhost:8080', QBIT_USERNAME: 'test', QBIT_PASSWORD: 'test', PUBLIC_ORIGIN: 'http://localhost:5080', COOKIE_SECURE: 'false' });
+const config = loadConfig({ PLEX_SERVER_ID: 'test-server-id', QBIT_URL: 'http://localhost:8080', QBIT_USERNAME: 'test', QBIT_PASSWORD: 'test', PUBLIC_ORIGIN: 'http://localhost:5080', COOKIE_SECURE: 'false' });
 const sample = (name, progress, state, extra = {}) => ({name,progress,state,category:'films',size:8589934592,downloaded:Math.round(8589934592*progress),downloadSpeed:0,uploadSpeed:0,eta:null,seedsConnected:0,seedsTotal:42,peersConnected:0,peersTotal:17,ratio:0,...extra});
 let fail = false;
 const server = createApp(config, { getSnapshot: async () => {
@@ -19,7 +18,11 @@ const server = createApp(config, { getSnapshot: async () => {
     sample('Cosmos Laundromat · 1080p',1,'uploading',{uploadSpeed:524288,seedsConnected:0,peersConnected:9}),
     sample('<img src=x onerror="window.INJECTED=true">',1,'stalledUP')
   ]};
-} });
+} }, {
+ createPin: async () => ({id:123,code:'strongtestpincode',clientId:'browser-test',expires:Date.now()+300000}),
+ checkPin: async () => 'private-plex-test-token',
+ verifyAccess: async () => ({name:'Test friend'}),
+});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 config.origin='http://127.0.0.1:'+server.address().port;
 let browser;
@@ -31,8 +34,11 @@ try {
  await page.goto(config.origin);
  await page.locator('#login-panel').waitFor({state:'visible'});
  await page.screenshot({path:new URL('../test-results/login.png', import.meta.url).pathname,fullPage:true});
- await page.locator('#password').fill(password);
+ await page.route('https://app.plex.tv/auth', async route => {
+   await route.fulfill({contentType:'text/html',body:`<!doctype html><a href="${config.origin}/?plex=return">Finish Plex login</a>`});
+ });
  await page.locator('#login-button').click();
+ await page.getByText('Finish Plex login').click();
  await page.locator('#torrent-list tr').first().waitFor();
  assert.equal(await page.locator('#torrent-list tr').count(),4);
  await page.screenshot({path:new URL('../test-results/desktop.png', import.meta.url).pathname,fullPage:true});

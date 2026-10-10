@@ -1,7 +1,7 @@
 FROM node:24-alpine
 ENV NODE_ENV=production PORT=5080
 WORKDIR /app
-COPY --chown=node:node package.json server.mjs LICENSE ./
+COPY --chown=node:node package.json server.mjs plex.mjs LICENSE ./
 COPY --chown=node:node public ./public
 USER node
 EXPOSE 5080

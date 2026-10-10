@@ -1,10 +1,9 @@
 import http from 'node:http';
-import { randomBytes, scryptSync, scrypt, timingSafeEqual } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
+import { createPlexClient, PlexDenied } from './plex.mjs';
 import { readFileSync } from 'node:fs';
-import { promisify } from 'node:util';
 import { pathToFileURL } from 'node:url';
 
-const derive = promisify(scrypt);
 const SESSION_TTL = 12 * 60 * 60 * 1000;
 const ASSETS = new Map([
   ['/', ['index.html', 'text/html; charset=utf-8']],
@@ -18,11 +17,8 @@ function secret(env, name) {
 }
 
 export function loadConfig(env = process.env) {
-  const password = secret(env, 'VIEWER_PASSWORD');
   const qbitPassword = secret(env, 'QBIT_PASSWORD');
-  if (!password || password.length < 16 || password.length > 1024 || password.startsWith('CHANGE_ME')) {
-    throw new Error('VIEWER_PASSWORD must be a unique password of 16–1024 characters');
-  }
+  if (!env.PLEX_SERVER_ID || !/^[A-Za-z0-9_-]{8,128}$/.test(env.PLEX_SERVER_ID) || env.PLEX_SERVER_ID.startsWith('CHANGE_ME')) throw new Error('PLEX_SERVER_ID must be your Plex machineIdentifier');
   if (!env.QBIT_URL || !env.QBIT_USERNAME || !qbitPassword) throw new Error('QBIT_URL, QBIT_USERNAME and QBIT_PASSWORD are required');
   const upstream = new URL(env.QBIT_URL);
   if (!['http:', 'https:'].includes(upstream.protocol) || upstream.username || upstream.password || upstream.search || upstream.hash) {
@@ -44,7 +40,7 @@ export function loadConfig(env = process.env) {
     }
   }
   return {
-    password, username: env.VIEWER_USERNAME || 'ami', port,
+    plexServerId: env.PLEX_SERVER_ID, port,
     host: env.HOST || '0.0.0.0', origin: origin.origin,
     secure: origin.protocol === 'https:',
     qbitUrl: upstream.href.replace(/\/$/, ''), qbitUsername: env.QBIT_USERNAME, qbitPassword,
@@ -152,19 +148,33 @@ async function bodyJSON(req) {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function createApp(config, qbit = createQbitClient(config)) {
-  const salt = randomBytes(32);
-  const expected = scryptSync(config.password, salt, 64);
+export function createApp(config, qbit = createQbitClient(config), plex = createPlexClient(config), clock = Date.now) {
   const sessions = new Map();
+  const pending = new Map();
   const attempts = new Map();
   let globalAttempts = [];
-  let passwordChecks = 0;
   let lastPrune = 0;
   const cookieName = config.secure ? '__Host-tw_session' : 'tw_session';
-  const cookie = (token, age = SESSION_TTL / 1000) => `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${age}${config.secure ? '; Secure' : ''}`;
+  const pendingName = config.secure ? '__Host-tw_plex' : 'tw_plex';
+  const cookie = (name, token, age, sameSite = 'Strict') => `${name}=${token}; Path=/; HttpOnly; SameSite=${sameSite}; Max-Age=${age}${config.secure ? '; Secure' : ''}`;
+  const readCookie = (req, name) => (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(`${name}=`))?.slice(name.length + 1);
   function send(res, code, data) {
     res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
     res.end(JSON.stringify(data));
+  }
+  function plexError(res, error) {
+    return send(res, error instanceof PlexDenied ? 403 : 503, { error: error instanceof PlexDenied
+      ? 'Ce compte n’a pas accès au serveur Plex autorisé, ou son autorisation a expiré.'
+      : 'Vérification Plex indisponible. Réessaie dans quelques instants.' });
+  }
+  async function validate(session) {
+    if (session.checkedUntil > clock()) return;
+    if (session.failedUntil > clock()) throw new Error('Plex unavailable');
+    if (!session.checking) session.checking = plex.verifyAccess(session.plexToken, session.clientId)
+      .then(user => { session.user = user; session.checkedUntil = clock() + 300000; })
+      .catch(error => { session.failedUntil = clock() + 10000; throw error; })
+      .finally(() => { session.checking = null; });
+    await session.checking;
   }
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -174,69 +184,100 @@ export function createApp(config, qbit = createQbitClient(config)) {
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     try {
-      const now = Date.now();
+      const now = clock();
       if (now - lastPrune > 60000) {
-        for (const [token, until] of sessions) if (until <= now) sessions.delete(token);
+        for (const [token, session] of sessions) if (session.expires <= now) sessions.delete(token);
+        for (const [token, pin] of pending) if (pin.expires <= now) pending.delete(token);
         for (const [ip, record] of attempts) if (record.until <= now) attempts.delete(ip);
         lastPrune = now;
       }
       const path = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && path === '/healthz') return send(res, 200, { status: 'ok' });
-      if (req.headers['sec-fetch-site'] === 'cross-site' || (req.headers.origin && req.headers.origin !== config.origin)) {
-        return send(res, 403, { error: 'Origine non autorisée.' });
-      }
-      // Require an exact configured browser origin on all state-changing requests.
-      if (req.method === 'POST' && req.headers.origin !== config.origin) return send(res, 403, { error: 'Origine non autorisée.' });
-      if (req.method === 'POST' && path === '/api/login') {
-        // Use the socket address, never an untrusted forwarded header. Behind Caddy,
-        // this deliberately shares the login budget across viewers (see README).
-        const ip = req.socket.remoteAddress;
-        let record = attempts.get(ip);
-        if (!record || record.until <= now) record = { count: 0, until: now + 15 * 60000 };
-        globalAttempts = globalAttempts.filter(t => now - t < 60000);
-        if (record.count >= 10 || globalAttempts.length >= 20 || attempts.size > 10000) {
-          res.setHeader('Retry-After', '900');
-          return send(res, 429, { error: 'Trop de tentatives. Réessaie dans 15 minutes.' });
-        }
-        record.count++;
-        attempts.set(ip, record);
-        globalAttempts.push(now);
-        let input;
-        try { input = await bodyJSON(req); } catch { return send(res, 400, { error: 'Requête invalide.' }); }
-        if (!input || typeof input.password !== 'string' || input.password.length > 1024 || typeof input.username !== 'string') return send(res, 400, { error: 'Requête invalide.' });
-        if (passwordChecks >= 2) return send(res, 429, { error: 'Connexion occupée. Réessaie dans quelques secondes.' });
-        let actual;
-        passwordChecks++;
-        try { actual = await derive(input.password, salt, 64); }
-        finally { passwordChecks--; }
-        if (!timingSafeEqual(expected, actual) || input.username !== config.username) return send(res, 401, { error: 'Identifiant ou mot de passe incorrect.' });
-        if (sessions.size >= 10000) return send(res, 503, { error: 'Réessaie plus tard.' });
-        attempts.delete(ip);
-        const token = randomBytes(32).toString('hex');
-        sessions.set(token, now + SESSION_TTL);
-        res.setHeader('Set-Cookie', cookie(token));
-        return send(res, 200, { authenticated: true });
-      }
-      const token = (req.headers.cookie || '').split(';').map(s => s.trim()).find(s => s.startsWith(`${cookieName}=`))?.slice(cookieName.length + 1);
-      const authenticated = !!token && (sessions.get(token) || 0) > now;
-      if (path.startsWith('/api/')) {
-        if (!authenticated) return send(res, 401, { error: 'Connexion nécessaire.' });
-        if (req.method === 'GET' && path === '/api/session') return send(res, 200, { authenticated: true });
-        if (req.method === 'POST' && path === '/api/logout') {
-          sessions.delete(token);
-          res.setHeader('Set-Cookie', cookie('', 0));
-          return send(res, 200, { authenticated: false });
-        }
-        if (req.method === 'GET' && path === '/api/torrents') {
-          try { return send(res, 200, await qbit.getSnapshot()); }
-          catch { return send(res, 502, { error: 'qBittorrent est momentanément inaccessible. Les dernières données affichées ne sont plus à jour.' }); }
-        }
-        return send(res, 404, { error: 'Route inconnue.' });
-      }
+      // The public shell must allow the top-level return navigation from Plex.
       const asset = ASSETS.get(path);
       if (req.method === 'GET' && asset) {
         res.writeHead(200, { 'Content-Type': asset.type });
         return res.end(asset.body);
+      }
+      if (req.headers['sec-fetch-site'] === 'cross-site' || (req.headers.origin && req.headers.origin !== config.origin) ||
+          (req.method === 'POST' && req.headers.origin !== config.origin)) return send(res, 403, { error: 'Origine non autorisée.' });
+      if (req.method === 'POST' && path === '/api/auth/plex/start') {
+        const ip = req.socket.remoteAddress; // Never trust forwarded IP headers.
+        let record = attempts.get(ip);
+        if (!record || record.until <= now) record = { count: 0, until: now + 15 * 60000 };
+        globalAttempts = globalAttempts.filter(t => now - t < 60000);
+        if (record.count >= 10 || globalAttempts.length >= 20 || attempts.size > 10000 || pending.size >= 1000) {
+          res.setHeader('Retry-After', '900');
+          return send(res, 429, { error: 'Trop de tentatives. Réessaie dans 15 minutes.' });
+        }
+        record.count++; attempts.set(ip, record); globalAttempts.push(now);
+        try { await bodyJSON(req); } catch { return send(res, 400, { error: 'Requête invalide.' }); }
+        try {
+          const pin = await plex.createPin();
+          pending.delete(readCookie(req, pendingName));
+          const token = randomBytes(32).toString('hex');
+          pending.set(token, { ...pin, nextCheck: 0, busy: false });
+          const params = new URLSearchParams({ clientID: pin.clientId, code: pin.code,
+            'context[device][product]': 'Torrent Watch', forwardUrl: `${config.origin}/?plex=return` });
+          res.setHeader('Set-Cookie', cookie(pendingName, token, 300, 'Lax'));
+          return send(res, 200, { authUrl: `https://app.plex.tv/auth#?${params}` });
+        } catch (error) { return plexError(res, error); }
+      }
+      if (req.method === 'POST' && path === '/api/auth/plex/status') {
+        try { await bodyJSON(req); } catch { return send(res, 400, { error: 'Requête invalide.' }); }
+        const token = readCookie(req, pendingName);
+        const pin = pending.get(token);
+        if (!pin || pin.expires <= now) {
+          pending.delete(token);
+          return send(res, 401, { error: 'Connexion Plex expirée. Recommence la connexion.' });
+        }
+        if (pin.busy || pin.nextCheck > now) return send(res, 202, { pending: true });
+        pin.busy = true; pin.nextCheck = now + 2000;
+        try {
+          const plexToken = await plex.checkPin(pin);
+          if (!plexToken) return send(res, 202, { pending: true });
+          const user = await plex.verifyAccess(plexToken, pin.clientId);
+          // Consume only this browser's PIN, once, and recheck expiry after network I/O.
+          if (pending.get(token) !== pin || pin.expires <= clock()) throw new PlexDenied();
+          pending.delete(token);
+          if (sessions.size >= 10000) return send(res, 503, { error: 'Réessaie plus tard.' });
+          sessions.delete(readCookie(req, cookieName));
+          const sessionToken = randomBytes(32).toString('hex');
+          sessions.set(sessionToken, { plexToken, clientId: pin.clientId, user,
+            expires: clock() + SESSION_TTL, checkedUntil: clock() + 300000 });
+          res.setHeader('Set-Cookie', [cookie(cookieName, sessionToken, SESSION_TTL / 1000), cookie(pendingName, '', 0, 'Lax')]);
+          return send(res, 200, { authenticated: true, user });
+        } catch (error) {
+          if (error instanceof PlexDenied) pending.delete(token);
+          return plexError(res, error);
+        } finally { pin.busy = false; }
+      }
+      const token = readCookie(req, cookieName);
+      const session = sessions.get(token);
+      if (path.startsWith('/api/')) {
+        if (!session || session.expires <= now) return send(res, 401, { error: 'Connexion nécessaire.' });
+        if (req.method === 'POST' && path === '/api/logout') {
+          sessions.delete(token);
+          pending.delete(readCookie(req, pendingName));
+          res.setHeader('Set-Cookie', [cookie(cookieName, '', 0), cookie(pendingName, '', 0, 'Lax')]);
+          return send(res, 200, { authenticated: false });
+        }
+        try { await validate(session); }
+        catch (error) {
+          if (error instanceof PlexDenied) { sessions.delete(token); res.setHeader('Set-Cookie', cookie(cookieName, '', 0)); }
+          return plexError(res, error);
+        }
+        // A concurrent logout/expiry must also invalidate an in-flight check.
+        if (sessions.get(token) !== session || session.expires <= clock()) return send(res, 401, { error: 'Connexion nécessaire.' });
+        if (req.method === 'GET' && path === '/api/session') return send(res, 200, { authenticated: true, user: session.user });
+        if (req.method === 'GET' && path === '/api/torrents') {
+          try {
+            const snapshot = await qbit.getSnapshot();
+            if (sessions.get(token) !== session || session.expires <= clock()) return send(res, 401, { error: 'Connexion nécessaire.' });
+            return send(res, 200, snapshot);
+          } catch { return send(res, 502, { error: 'qBittorrent est momentanément inaccessible. Les dernières données affichées ne sont plus à jour.' }); }
+        }
+        return send(res, 404, { error: 'Route inconnue.' });
       }
       return send(res, 404, { error: 'Route inconnue.' });
     } catch { if (!res.headersSent) send(res, 500, { error: 'Erreur interne.' }); else res.end(); }
